@@ -1,0 +1,14 @@
+# pyproject.toml
+
+
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tic_tac_toe_ai_player"
+version = "1.0.0"
+
+
+# Personnal note:
+# this is a configuration file using TOML format. 
