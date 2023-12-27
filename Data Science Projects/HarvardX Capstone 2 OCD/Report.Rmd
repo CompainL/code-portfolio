@@ -1,0 +1,1150 @@
+---
+title: "Data Science: Capstone Chose Your Own Projct Report"
+author: "Louri Compain"
+date: "2023-12-03"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: yes
+---
+
+
+
+# Overview
+
+## Introduction
+
+This report is my submission for the "Project Submission: Choose Your Own" part of the HarvardX PH125.9x Data Science: Capstone course. 
+
+I elected to use a dataset from kaggle, titled "OCD Patient Dataset: Demographics & Clinical Data", with information about 1500 patients. This is a medical dataset that can be used for the very practical purpose of helping a patient with an OCD diagnosis.
+Please take note that I am not a medical professional and the purpose of this project is not a deployment in a professional context. The goal here is to practice my data science skills and to showcase it for the class.
+
+## Project goal
+
+My goal during this project will be to predict the Duration of Symptoms variable, based on the rest of the information available about the patient
+
+This is a regression task. We can note that this is a "true regression" as we have a continuous range of possible values, unlike the MovieLens exercise, where I used regression and rounded to set values to predict an ordinal class.
+
+To measure the performance of our predictions, we will be using the RMSE.
+
+### Libraries and Dataset
+
+```{r}
+#------libraries loading--------------
+library(readr)
+library(tidyverse)
+library(caret)
+library(e1071)
+library(ggplot2)
+
+library(corrplot)
+library(randomForest)
+library(h2o)
+
+#------seed setting--------------
+set.seed(1, sample.kind="Rounding")
+
+```
+
+
+```{r}
+#------dataset--------------
+library(here)
+here("ocd_patient_dataset.csv")
+ocd_patient_dataset <- read_csv(here("ocd_patient_dataset.csv"))
+```
+We have 31 variables:
+- Patient ID: a numerical Id to recognize a patient while protecting their privacy. It does not reveal information about them, and we can expect each patient to apear only once, so its usefullness is limited.
+- Age: Age of the patient at the time of data collection. Interval variable in years.
+- Gender: Gender of the patient. Nominal variable inthe form of a binary between men and women.
+- Ethnicity: Ethnic background of the patient. Nominal variable with the following values: African, Asian, Caucasion, Hispanic.
+- Marital Status: Marital status of the patient. Nominal variable. The possible values are Single, Married or Divorced.
+- Education Level: Highest level of education completed by the patient. Ordinal variables with the following values: High School, Some College, College Degree, Graduate Degree.
+- OCD Diagnosis Date : Date when the patient was diagnosed with Obsessive-Compulsive Disorder.This is an interval variable in days, with values between 13/11/2013 and09/11/2022.
+- Duration of Symptoms (months): Number of months since the onset of OCD symptoms. Interval variable between 6 and 240. This is the variable we want to predict for the project.
+- Previous Diagnoses: Any previous psychiatric diagnoses or comorbidities. This nominal variable has values : GAD, MDD, None, Panic Disorder, PTSD. 
+- Family History of OCD: Indicates whether there is a family history of OCD in the patient's relatives. This is a binary categorical variable.
+- Obsession Type: Type of obsession (no description on the dataset page). This is a nominal variable. The values are Contamination, Harm-Related, Hoarding, Religious, Symmetry.
+- Compulsion Type: Type of compulsion (no description on the dataset page). This is a nominal variable. The values are Checking, Counting, Ordering, Praying and Washing.
+- Y-BOCS Score (Obsessions): Score on the Yale–Brown Obsessive Compulsive Scale for Obsessions(no description on the dataset page). Interval variable between 0 and 40.
+- Y-BOCS Score (Compulsions): Score on the Yale–Brown Obsessive Compulsive Scale for Compulsions(no description on the dataset page). Interval variable between 0 and 40.
+- Depression Diagnosis: Diagnosis for depression  as a binary variable (no description on the dataset page).
+- Anxiety Diagnosis: Diagnosis for anxiety as a binary variable (no description on the dataset page).
+- Medications: Medication given to the patient (no description on the dataset page). This is a nominal variable with the following values : Benzodiazepine, None, SNRI, SSRI.
+
+```{r}
+head(ocd_patient_dataset)
+```
+We will immediately deal with one issue of this dataset: several columns have multi-word names, which might not react well to some functions. We can change that by renaming them.
+```{r}
+ocd_patient_dataset <- as.data.frame(ocd_patient_dataset)
+
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Patient ID"] <- "Patient_ID"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Marital Status"] <- "Marital_Status"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Education Level"] <- "Education_Level"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "OCD Diagnosis Date"] <- "OCD_Diagnosis_Date"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Duration of Symptoms (months)"] <- "Duration_of_Symptoms"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Previous Diagnoses"] <- "Previous_Diagnoses"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Family History of OCD"] <- "Family_History_of_OCD"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Obsession Type"] <- "Obsession_Type"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Compulsion Type"] <- "Compulsion_Type"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Y-BOCS Score (Obsessions)"] <- "Y_BOCS_Score_Obsessions"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Y-BOCS Score (Compulsions)"] <- "Y_BOCS_Score_Compulsions"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Depression Diagnosis"] <- "Depression_Diagnosis"
+names(ocd_patient_dataset)[names(ocd_patient_dataset) == "Anxiety Diagnosis"] <- "Anxiety_Diagnosis"
+```
+
+
+We will now separate the dataset between a main working set used for exploration and training, and a separate set for the final test. We do not have many data points, so a rather small test set is preferable. A 10% separation should give us 1350 data points for the work set and 150 for the test set. This should give us enough in the test set to have something to measure, while preserving many points for the training.
+
+
+```{r}
+test_index <- createDataPartition(y = ocd_patient_dataset$`Duration_of_Symptoms`, times = 1, p = 0.1, list = FALSE)
+work_set <- ocd_patient_dataset[-test_index,]
+final_test_set <- ocd_patient_dataset[test_index,]
+```
+
+
+##Report plan
+We will be 
+
+# Analysis
+
+## Initial Analysis
+Before we make more changes to the dataset, we will be giving a look to some of the values.
+###Predicted variable distribution
+The first we can do is see the distribution of the variable we want to predict.
+```{r}
+ggplot(work_set, aes(x=`Duration_of_Symptoms`)) +
+  geom_histogram(color="black", fill="lightblue") +
+  ggtitle("Distribution of durations in month")+
+  geom_vline(
+    aes(
+      xintercept=mean(Duration_of_Symptoms)
+      ),
+    color="blue",
+    linetype="dashed",
+    size=1
+  )
+```
+We have values ranging from 6 to 240, with an average of 122.0504. This is a value in months.
+
+Now, we will consider the variables available for the prediction
+
+### ID
+```{r}
+n_distinct(work_set$Patient_ID)
+nrow(work_set)
+
+```
+We can see that 87 patients have two entries. This is not really worth exploiting for our project, since we cannot know for sure that a patient will have previous history (like we did in the MovieLens project for users).
+
+### Gender
+```{r}
+work_set %>% ggplot(aes(x=Gender, y=`Duration_of_Symptoms`)) + geom_boxplot()  + ggtitle("Box plot of duration of symptoms according to gender")
+```
+We can see that men have a slightly higher dispersion.
+
+```{r}
+ggplot(work_set, aes(x=`Gender`)) + geom_bar() + ggtitle("Distribution of Gender")
+```
+Perfect parity is nice, and reduces the risk of having a tool that predicts better for one gender than the other, but is also not very informative.
+```{r}
+ggplot(work_set, aes(x=Duration_of_Symptoms, fill=Gender, color=Gender)) +
+  geom_histogram(alpha=0.5, position="identity")+
+  facet_grid(Gender ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Gender")
+```
+
+
+### Ethnicit
+```{r}
+work_set %>% ggplot(aes(x=Ethnicity, y=`Duration_of_Symptoms`)) + 
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to etchnicity")
+```
+We can see some change between ethnicities.  
+
+```{r}
+ggplot(work_set, aes(x=`Ethnicity`)) + geom_bar() + ggtitle("Distribution of Ethnicity")
+```
+Our distribution of ethnicities is inequal, but not radically. 
+
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Ethnicity, fill=Ethnicity)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Ethnicity ~ .) + 
+  ggtitle("Distribution of Duration of Symptoms divided by Ethnicity")
+```
+
+### Marital Status
+```{r}
+work_set %>% ggplot(aes(x=`Marital_Status`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Marital Status")
+```
+Maried people seem to fare a bit better, with lowe average and a smaller box than divorced or single people. 
+
+```{r}
+ggplot(work_set, aes(x=`Marital_Status`)) + geom_bar() + ggtitle("Distribution of Marital Status")
+```
+
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Marital_Status, fill=Marital_Status)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Marital_Status ~ .)
+```
+
+
+### Education Level
+
+```{r}
+work_set %>% ggplot(aes(x=`Education_Level`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Education Level")
+```
+We see some variation, and in particular for the Graduate Degree with a visibly lower average and lower bounds for te box. 
+```{r}
+ggplot(work_set, aes(x=`Education_Level`)) +
+  geom_bar() +
+  ggtitle("Distribution of Education Level")
+```
+
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Education_Level, fill=Education_Level)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Education_Level ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Education Level")
+```
+
+### Previous Diagnoses
+```{r}
+work_set %>% ggplot(aes(x=`Previous_Diagnoses`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Previous Diagnoses")
+```
+
+```{r}
+ggplot(work_set, aes(x=`Previous_Diagnoses`)) + geom_bar() + ggtitle("Distribution of Previous Diagnoses")
+```
+We can notice that None is the rarest value. 
+
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Previous_Diagnoses, fill=Previous_Diagnoses)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Previous_Diagnoses ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Previous Diagnoses")
+```
+
+### Family History of OCD
+```{r}
+work_set %>% ggplot(aes(x=`Family_History_of_OCD`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Family History of OCD")
+```
+The average is slightly higher when there i a family history of OCD. 
+
+```{r}
+ggplot(work_set, aes(x=`Family_History_of_OCD`)) + geom_bar() + ggtitle("Distribution of Family History of OCD")
+```
+
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Family_History_of_OCD, fill=Family_History_of_OCD)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Family_History_of_OCD ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Family History of OCD")
+```
+
+### Obsession Type
+```{r}
+work_set %>% ggplot(aes(x=`Obsession_Type`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Obsession Type")
+```
+Some obsession types have lower average durations of symptoms, like Harm-related. 
+```{r}
+ggplot(work_set, aes(x=`Obsession_Type`)) + geom_bar() + ggtitle("Distribution of Obsession Type")
+```
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Obsession_Type, fill=Obsession_Type)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Obsession_Type ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Obsession Type")
+```	
+### Compulsion Type
+```{r}
+work_set %>% ggplot(aes(x=`Compulsion_Type`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Compulsion Type")
+```
+
+```{r}
+ggplot(work_set, aes(x=`Compulsion_Type`)) +
+  geom_bar() +
+  ggtitle("Distribution of Compulsion Type")
+```
+
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Compulsion_Type, fill=Compulsion_Type)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Compulsion_Type ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Compulsion Type")
+```	
+
+### Depression Diagnosis
+```{r}
+work_set %>% ggplot(aes(x=`Depression_Diagnosis`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Depression Diagnosis")
+```
+There is very little difference regarding the duration of symptoms between patients with a depression diagnosis and those who don't.
+
+```{r}
+ggplot(work_set, aes(x=`Depression_Diagnosis`)) + geom_bar() + ggtitle("Distribution of Depression Diagnosis")
+```
+
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Depression_Diagnosis, fill=Depression_Diagnosis)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Depression_Diagnosis ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Depression Diagnosis")
+```	
+
+### Anxiety Diagnosis
+```{r}
+work_set %>% ggplot(aes(x=`Anxiety_Diagnosis`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Anxiety Diagnosis")
+```
+Patients with an Anxiety diagnosis seem to have a lower average but greater variance in their duration of symptoms. 
+
+```{r}
+ggplot(work_set, aes(x=`Anxiety_Diagnosis`)) + geom_bar() + ggtitle("Distribution of Anxiety Diagnosis")
+```
+```{r}
+ 
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Anxiety_Diagnosis, fill=Anxiety_Diagnosis)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Anxiety_Diagnosis ~ .) +
+  ggtitle("Distribution of Duration of Symptoms divided by Anxiety Diagnosis")
+```	
+
+### Medications
+```{r}
+work_set %>% ggplot(aes(x=`Medications`, y=`Duration_of_Symptoms`)) +
+  geom_boxplot()  +
+  ggtitle("Box plot of duration of symptoms according to Medication")
+```
+Patients medicated with SNRI seem to have longer symptom duration than others. 
+
+```{r}
+ggplot(work_set, aes(x=`Medications`)) + geom_bar() + ggtitle("Distribution of Medications")
+```
+```{r}
+ 
+library(plyr)
+mu <- ddply(work_set, "Medications", summarise, grp.mean=mean(Duration_of_Symptoms))
+ggplot(work_set, aes(x=Duration_of_Symptoms, color=Medications, fill=Medications)) +
+  geom_histogram(alpha=0.5)+
+  facet_grid(Medications ~ .)+
+  geom_vline(
+    data=mu,
+    aes(
+      xintercept=grp.mean,
+      color="black"
+    ),
+    linetype="dashed"
+    ) +
+  ggtitle("Distribution of Duration of Symptoms divided by Medcation")
+```	
+
+### General Comment
+
+After observing these graphs, we can notice that none of the variables shows a very significant impact over the duration of symptoms. The most interesting effects can be expected from combinations of factors or from the cummulative effect of multiple variables.
+
+## Data preparation
+
+First we will encore our categorical variables. Gender, Ethnic, Marital Status, Previous Diagnoses, Family History of OCD, Obsession Type, Compulsion Type, Depression Diagnosis, Anxiety Diagnosis and Medications are all nominal. We will use one hot encoding. Education Level is an ordinal variable. We also eliminate the spaces in variable values to avoid future issues.
+```{r}
+encoded_work_set <- work_set
+#Binaries
+encoded_work_set <- mutate(encoded_work_set, Gender = if_else(Gender=="Female", 1, 0))
+encoded_work_set <- mutate(encoded_work_set, Family_History_of_OCD  = if_else(Family_History_of_OCD=="No",0,1))
+encoded_work_set <- mutate(encoded_work_set, Depression_Diagnosis  = if_else(Depression_Diagnosis=="No",0,1))
+encoded_work_set <- mutate(encoded_work_set, Anxiety_Diagnosis  = if_else(Anxiety_Diagnosis=="No",0,1))
+#Nominals
+Ethnicities <- c("African","Asian","Caucasian","Hispanic")
+Education_Level <- c("High School","Some College","College Degree","Graduate Degree")
+Marital_Statuses <- c("Divorced","Married","Single")
+Previous_Diagnoses  <- c("GAD","MDD","Panic Disorder","PTSD","None")
+Obsession_Types <- c("Contamination","Harm-related","Hoarding","Religious","Symmetry")
+Compulsion_Types <- c("Checking", "Counting", "Ordering", "Praying", "Washing")
+Medications <- c("Benzodiazepine","None","SNRI","SSRI")
+
+for(index in 1:length(Ethnicities)){
+    value <- Ethnicities[index]
+    name = paste("Ethnicity", value, sep = "_")
+    encoded_work_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_work_set$Ethnicity, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_work_set[name] <- detection
+}
+for(index in 1:length(Marital_Statuses)){
+    value <- Marital_Statuses[index]
+    name = paste("Marital_Status", value, sep = "_")
+    encoded_work_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_work_set$Marital_Status, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_work_set[name] <- detection
+}
+for(index in 1:length(Previous_Diagnoses)){
+    value <- Previous_Diagnoses[index]
+    name = paste("Previous_Diagnosis", value, sep = "_")
+    encoded_work_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_work_set$Previous_Diagnoses, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_work_set[name] <- detection
+}
+for(index in 1:length(Obsession_Types)){
+    value <- Obsession_Types[index]
+    name = paste("Obsession_Type", value, sep = "_")
+    encoded_work_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_work_set$Obsession_Type, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_work_set[name] <- detection
+}
+for(index in 1:length(Compulsion_Types)){
+    value <- Compulsion_Types[index]
+    name = paste("Compulsion_Type", value, sep = "_")
+    encoded_work_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_work_set$Compulsion_Type, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_work_set[name] <- detection
+}
+for(index in 1:length(Medications)){
+    value <- Medications[index]
+    name = paste("Medications", value, sep = "_")
+    encoded_work_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_work_set$Medications, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_work_set[name] <- detection
+}
+for(index in 1:length(Education_Level)){
+    value <- Education_Level[index]
+    name = paste("Education_Level", value, sep = "_")
+    encoded_work_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_work_set$Education_Level, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_work_set[name] <- detection
+}
+
+names(encoded_work_set)[names(encoded_work_set) == "Previous_Diagnosis_Panic Disorder"] <- "Previous_Diagnosis_Panic_Disorder"
+names(encoded_work_set)[names(encoded_work_set) == "Obsession_Type_Harm-related"] <- "Obsession_Type_Harm_related"
+names(encoded_work_set)[names(encoded_work_set) == "Education_Level_High School"] <- "Education_Level_High_School"
+names(encoded_work_set)[names(encoded_work_set) == "Education_Level_Some College"] <- "Education_Level_Some_College"
+names(encoded_work_set)[names(encoded_work_set) == "Education_Level_College Degree"] <- "Education_Level_College_Degree"
+names(encoded_work_set)[names(encoded_work_set) == "Education_Level_Graduate Degree"] <- "Education_Level_Graduate_Degree"
+
+```
+We remove the old columns, since they have been encoded under new forms.
+```{r}
+encoded_work_set <- encoded_work_set[,c(-1, -4,-5,-6,-9,-11,-12,-17)]
+
+```
+
+We also need to scale the data.
+
+```{r}
+#create the scale
+scale <- preProcess(encoded_work_set[,c(-4)], method=c("range"))
+#apply it
+scaled_work_set <- predict(scale, encoded_work_set)
+```
+
+## Statistical analysis
+After we transformed the dataset, we can apply some analysis that was not available. In particular the correlation plot. 
+```{r}
+
+subset_data <- scaled_work_set[, c("Duration_of_Symptoms","Age","Gender","Family_History_of_OCD","Y_BOCS_Score_Obsessions","Y_BOCS_Score_Compulsions","Depression_Diagnosis","Anxiety_Diagnosis","Ethnicity_African","Ethnicity_Asian","Ethnicity_Caucasian","Ethnicity_Hispanic","Marital_Status_Divorced","Marital_Status_Married","Marital_Status_Single","Previous_Diagnosis_GAD","Previous_Diagnosis_MDD","Previous_Diagnosis_Panic_Disorder","Previous_Diagnosis_PTSD","Previous_Diagnosis_None","Obsession_Type_Contamination","Obsession_Type_Harm_related","Obsession_Type_Hoarding","Obsession_Type_Religious","Obsession_Type_Symmetry","Compulsion_Type_Checking","Compulsion_Type_Counting","Compulsion_Type_Ordering","Compulsion_Type_Praying","Compulsion_Type_Washing","Medications_Benzodiazepine","Medications_None","Medications_SNRI","Medications_SSRI","Education_Level_High_School","Education_Level_Some_College","Education_Level_College_Degree","Education_Level_Graduate_Degree")]
+corrplot(cor(subset_data), method = "color", tl.col="black", tl.srt=45,tl.cex = 0.4)
+
+```
+
+We can see that the only major correlations between variables are in the categorical variables that we turned into binaries. Since they are mutually exclusive it is normal for them to be highly uncorrelated. 
+However it seems that the duration of symptoms doesn't have much correlation with the rest. This suggests that the available data is not very informative. This does not bode well for our goal, and we probably will not end with very precise predictions.
+
+```{r}
+corrplot(cor(subset_data)[1,, drop=FALSE], method = "color", cl.pos='n', tl.col="black", tl.srt=45,tl.cex = 0.4)
+```
+If we look specifically at the first line, we can see the correlations of our variables with the on thing we try to predict: the Duration of symptoms. 
+
+# Methodology
+
+
+We separate our work set between a training set and a testing set. Since we already have few data points (1349), we will be going for a small test set (5%).
+
+```{r}
+train_test_index <- createDataPartition(y = scaled_work_set$Duration_of_Symptoms, times = 1, p = 0.05, list = FALSE)
+dat_train <- scaled_work_set[-train_test_index,]
+dat_test <- scaled_work_set[train_test_index,]
+prediction_results <- dat_test[,4]
+dat_test<- dat_test[,-4]
+```
+##  Models Exploration
+
+Now we will try to implement several models in order to compare them. The end goal is to chose the one with the lowest RMSE. 
+
+### Naive prediction
+We start by taking the average duration of symptoms and using it as a generic prediction.
+
+```{r}
+avg <- mean(dat_train$Duration_of_Symptoms)
+postResample(pred  = avg, obs  = prediction_results)
+rmse_0 <- postResample(pred  = avg, obs  = prediction_results)[1]
+
+```
+We have a baseline of 68 month error with our RMSE. This is a lot, about 25% of our range of values. 
+
+### Linear Model
+Now, we will try a linear model with all our variables in order to predict the duration of symptoms with a bit more precision.
+```{r}
+linear_regression_model_1 <- lm(
+  Duration_of_Symptoms ~ .,
+  data = dat_train)
+
+
+```
+```{r}
+linear_regression_prediction_1 <- predict(
+  linear_regression_model_1, 
+  newdata = dat_test
+)
+```
+```{r}
+postResample(pred  = linear_regression_prediction_1, obs  = prediction_results)
+rmse_1 <- postResample(pred  = linear_regression_prediction_1, obs  = prediction_results)[1]
+```
+Using a linear model, we get an RMSE of 68.568238328. This is barely an improvement over the 68.65346 of our naive method. We also notice that our Rsquared is very low. This is not a good prediction and we need to improve it.  
+
+### Linear Model with interaction terms
+We will try to add interaction terms to see if there is an improvement. First, we try to implement every possible interaction term. While this is not very good for prediction, it should be informative regarding the interactions that have the most effect.
+```{r}
+linear_regression_model_2 <- lm(
+  Duration_of_Symptoms ~ .^2,
+  data = dat_train)
+
+
+```
+```{r}
+linear_regression_prediction_2 <- predict(
+  linear_regression_model_2, 
+  newdata = dat_test
+)
+```
+
+```{r}
+postResample(pred  = linear_regression_prediction_2, obs  = prediction_results)
+rmse_2 <- postResample(pred  = linear_regression_prediction_2, obs  = prediction_results)[1]
+```
+We degraded our performances, but this is not unexpected. We added too many interaction variables (468 of them to be exact). The interesting part is that this will allow us to get the importance of he interaction terms and use the most interesting ones. 
+
+### Linear Model with top terms
+Let's isolate the top 20 interaction terms by importance and use them as terms for our linear model.
+```{r}
+importances <- varImp(linear_regression_model_2, conditional=TRUE)
+ordered_importances <-importances[order(importances[,"Overall"]), , drop = FALSE]
+top_20 <- row.names(ordered_importances)[1:20]
+```
+```{r}
+formula <- ""
+for(index in 1:20){
+  formula <- paste(formula,top_20[index],sep = " + ")
+}
+formula  <- paste("Duration_of_Symptoms",formula,sep = " ~ ")
+```
+
+
+```{r}
+linear_regression_model_3 <- lm(
+  formula,
+  data = dat_train)
+
+```
+
+```{r}
+linear_regression_prediction_3 <- predict(
+  linear_regression_model_3, 
+  newdata = dat_test
+)
+```
+
+```{r}
+postResample(pred  = linear_regression_prediction_3, obs  = prediction_results)
+```
+We see an improvement, at 67.57878137. This is still insufficient, and the Rsquared is still very low.
+
+Lets try several numbers of "top n" interaction terms.
+
+```{r}
+sequence <-seq( 5, 100,  5)
+for (index_sequence in 1:length(sequence)){
+  n <- sequence[index_sequence]
+  top_n <- row.names(ordered_importances)[1:n]
+  formula <- ""
+  for(index_formula in 1:n){
+    formula <- paste(formula,top_n[index_formula],sep = " + ")
+  }
+  formula  <- paste("Duration_of_Symptoms",formula,sep = " ~ ")
+  linear_regression_model_3_n <- lm(
+    formula,
+    data = dat_train
+    )
+  linear_regression_prediction_3_n <- predict(
+    linear_regression_model_3_n, 
+    newdata = dat_test
+    )
+  print(n)
+  print(postResample(pred  = linear_regression_prediction_3_n, obs  = prediction_results)
+)
+}
+```
+
+
+After some tweaking, we get a better result for the top 30 This is currently our best score, with an RMSE of 67.31247173  .
+
+```{r}
+top_30 <- row.names(ordered_importances)[1:30]
+formula <- ""
+for(index in 1:30){
+  formula <- paste(formula,top_30[index],sep = " + ")
+}
+formula  <- paste("Duration_of_Symptoms",formula,sep = " ~ ")
+```
+
+```{r}
+linear_regression_model_3 <- lm(
+  formula,
+  data = dat_train)
+
+```
+
+```{r}
+linear_regression_prediction_3 <- predict(
+  linear_regression_model_3, 
+  newdata = dat_test
+)
+```
+
+```{r}
+postResample(pred  = linear_regression_prediction_3, obs  = prediction_results)
+rmse_3  <- postResample(pred  = linear_regression_prediction_3, obs  = prediction_results)[1]
+```
+
+### Linear Model with initial variable and top interactions
+
+Now, we might be interested in using the top interaction terms but also using all of the original variables.
+```{r}
+top_30 <- row.names(ordered_importances)[1:30]
+formula_2 <- ".+"
+for(index in 1:30){
+  formula_2 <- paste(formula_2,top_30[index],sep = " + ")
+}
+formula_2  <- paste("Duration_of_Symptoms",formula_2,sep = " ~ ")
+```
+
+```{r}
+linear_regression_model_4 <- lm(
+  formula_2,
+  data = dat_train)
+
+```
+
+```{r}
+linear_regression_prediction_4 <- predict(
+  linear_regression_model_4, 
+  newdata = dat_test
+)
+```
+
+```{r}
+postResample(pred  = linear_regression_prediction_4, obs  = prediction_results)
+rmse_4 <- postResample(pred  = linear_regression_prediction_4, obs  = prediction_results)[1]
+```
+
+After considering the RMSE, this is not particularly interesting.
+
+### Multinomial regression
+Now, we will compare our linear model to an alternative: a multinomial model. For this, we will use squared versions of the numeric variables and add them to the mix.
+```{r}
+#Create multinomial terms
+dat_train_binomial <- dat_train
+dat_train_binomial$Age_squared <- dat_train$Age^2
+dat_train_binomial$Y_BOCS_Score_Obsessions_squared <- dat_train_binomial$Y_BOCS_Score_Obsessions^2
+dat_train_binomial$Y_BOCS_Score_Compulsions_squared <- dat_train_binomial$Y_BOCS_Score_Compulsions^2
+dat_test_binomial <- dat_test
+dat_test_binomial$Age_squared <- dat_test$Age^2
+dat_test_binomial$Y_BOCS_Score_Obsessions_squared <- dat_test_binomial$Y_BOCS_Score_Obsessions^2
+dat_test_binomial$Y_BOCS_Score_Compulsions_squared <- dat_test_binomial$Y_BOCS_Score_Compulsions^2
+```
+
+```{r}
+binomial_regression_model_1 <- lm(
+  "Duration_of_Symptoms ~ .",
+  data = dat_train_binomial)
+
+```
+
+```{r}
+binomial_regression_prediction_1 <- predict(
+  binomial_regression_model_1, 
+  newdata = dat_test_binomial
+)
+```
+
+```{r}
+postResample(pred  = binomial_regression_prediction_1, obs  = prediction_results)
+rmse_5 <- postResample(pred  = binomial_regression_prediction_1, obs  = prediction_results)[1]
+```
+We get a slightly worse result than our champion (the previous one was at 67.31247173 / 0.04304108 / 58.02390455). But maybe we can get better interaction terms.    
+
+### Multinomial regression with interaction terms
+```{r}
+binomial_regression_model_2 <- lm(
+  "Duration_of_Symptoms ~ .^2",
+  data = dat_train_binomial)
+
+```
+
+```{r}
+binomial_regression_prediction_2 <- predict(
+  binomial_regression_model_2, 
+  newdata = dat_test_binomial
+)
+```
+
+```{r}
+postResample(pred  = binomial_regression_prediction_2, obs  = prediction_results)
+rmse_6 <- postResample(pred  = binomial_regression_prediction_2, obs  = prediction_results)[1]
+```
+The results are very bad. Let's isolate the top 30 interactions as we did previously.
+
+### Multinomial regression with top interaction terms
+```{r}
+importances_binomial <- varImp(binomial_regression_model_2, conditional=TRUE)
+#ordered_importances_binomial <-importances_binomial %>% arrange(., desc(Overall))
+ordered_importances_binomial <-importances[order(importances[,"Overall"]), , drop = FALSE]
+
+top_30_binomial <- row.names(ordered_importances_binomial)[1:30]
+formula_binomial <- ""
+for(index in 1:30){
+  formula_binomial <- paste(formula_binomial,top_30_binomial[index],sep = " + ")
+}
+formula_binomial  <- paste("Duration_of_Symptoms",formula_binomial,sep = " ~ ")
+```
+
+```{r}
+binomial_regression_model_3 <- lm(
+  formula_binomial,
+  data = dat_train_binomial)
+
+```
+
+```{r}
+binomial_regression_prediction_3 <- predict(
+  binomial_regression_model_3, 
+  newdata = dat_test_binomial
+)
+```
+
+```{r}
+postResample(pred  = binomial_regression_prediction_3, obs  = prediction_results)
+```
+
+We match  the current result of 67.31247173 / 0.04304108 / 58.02390455. This suggests that none of the squared values ended up in our top 30 and benefited us. 
+We inherited 30 from the linear model. Lets try other numbers
+
+```{r}
+for (index_sequence in 1:length(sequence)){
+  n <- sequence[index_sequence]
+  top_n <- row.names(ordered_importances_binomial)[1:n]
+  formula <- ""
+  for(index_formula in 1:n){
+    formula <- paste(formula,top_n[index_formula],sep = " + ")
+  }
+  formula  <- paste("Duration_of_Symptoms",formula,sep = " ~ ")
+  binomial_regression_model_3_n <- lm(
+    formula,
+    data = dat_train_binomial
+    )
+  binomial_regression_prediction_3_n <- predict(
+    binomial_regression_model_3_n, 
+    newdata = dat_test_binomial
+    )
+  print(n)
+  print(postResample(pred  = binomial_regression_prediction_3_n, obs  = prediction_results)
+)
+}
+```
+
+We get our best performance at 30. There is no change.
+```{r}
+top_30_binomial <- row.names(ordered_importances_binomial)[1:30]
+formula_binomial <- ""
+for(index in 1:30){
+  formula_binomial <- paste(formula_binomial,top_30_binomial[index],sep = " + ")
+}
+formula_binomial  <- paste("Duration_of_Symptoms",formula_binomial,sep = " ~ ")
+```
+
+```{r}
+binomial_regression_model_3 <- lm(
+  formula_binomial,
+  data = dat_train_binomial)
+
+```
+
+```{r}
+binomial_regression_prediction_3 <- predict(
+  binomial_regression_model_3, 
+  newdata = dat_test_binomial
+)
+```
+
+```{r}
+postResample(pred  = binomial_regression_prediction_3, obs  = prediction_results)
+rmse_7 <- postResample(pred  = binomial_regression_prediction_3, obs  = prediction_results)[1]
+```
+
+We can conclude that a binomial model does not bring anything particularly interesting over the linear model.
+
+### Support Vector Regression`
+Another model we might use is a support vector model geared toward regression. 
+```{r}
+
+svm_model_1 <- svm(Duration_of_Symptoms ~ . , dat_train)
+ 
+svm_prediction_1 <- predict(svm_model_1, newdata = dat_test)
+postResample(pred  = svm_prediction_1, obs  = prediction_results)
+rmse_8 <- postResample(pred  = svm_prediction_1, obs  = prediction_results)[1]
+
+```
+
+With an RMSE of 66.58566545, the support vector model performs better than both the linear and binomial models.
+
+### Optimized Support Vector Regression`
+We can improve our model by tuning some parameters
+
+```{r}
+gamma_options = c(0.01,0.1, 1,5,10)
+cost_options = c(0.01,0.1, 1,5,10)
+best_RMSE <- 100
+best_gamma <- 0
+best_cost <- 0
+for(index_gamma in 1:length(gamma_options)){
+  for(index_cost in 1:length(cost_options)){
+    gamma = gamma_options[index_gamma]
+    cost = cost_options[index_cost]
+    svm_model <-svm(
+      Duration_of_Symptoms~.,
+      data = dat_train,
+      gamma = gamma,
+      cost = cost
+      )
+    svm_prediction <- predict(svm_model, newdata = dat_test)
+    RMSE <- postResample(pred  = svm_prediction, obs  = prediction_results)[1]
+    if(RMSE < best_RMSE){
+      best_RMSE <- RMSE
+      best_gamma <- gamma
+      best_cost <- cost
+    }
+  }
+}
+best_RMSE
+best_gamma
+best_cost
+```
+
+
+```{r}
+svm_model_2 <-svm(
+  Duration_of_Symptoms~.,
+  data = dat_train,
+  gamma = 0.01,
+  cost = 1)
+svm_prediction_2 <- predict(svm_model_2, newdata = dat_test)
+postResample(pred  = svm_prediction_2, obs  = prediction_results)
+rmse_9 <- postResample(pred  = svm_prediction_2, obs  = prediction_results)[1]
+
+```
+We slightly improved on the previous result, from 66.58566545 to 66.4930270. This is a marginal improvement  considering the scale of our RMSE.
+
+### Random forest regression
+Another option is the Random forest. We implement it here, with a thousand trees.
+```{r}
+random_forest_model_1 <- randomForest(Duration_of_Symptoms ~ ., data=dat_train, ntree=1000, importance=TRUE)
+```
+```{r}
+random_forest_prediction_1 <- predict(random_forest_model_1, newdata = dat_test)
+postResample(pred  = random_forest_prediction_1, obs  = prediction_results)
+rmse_10 <- postResample(pred  = random_forest_prediction_1, obs  = prediction_results)[1]
+
+```
+Random forest does not perform as well as our current champion, the SVM.
+
+### ANN regression
+Te last model we experiment with will be the Artificial Neural Network. We use the h2o library. A series of test showed that due to our small number of data points we overtrain within a very small number of epochs. 3 hidden layers of 20 neurons also showed the best result.
+```{r}
+#Initialize h2o
+h2o.init(nthreads = -1)
+#create model
+ann_model_1 = h2o.deeplearning(
+  y = 'Duration_of_Symptoms',
+  training_frame = as.h2o(dat_train),
+  activation = 'Rectifier',
+  hidden = c(20, 20, 20),
+  epochs = 5
+  )
+#predict values
+ann_prediction_1 = h2o.predict(
+  ann_model_1, 
+  newdata = as.h2o(dat_test)
+  )
+ann_prediction_1 = as.vector(ann_prediction_1)
+#calculate RMSE
+postResample(pred  = ann_prediction_1, obs  = prediction_results)
+rmse_11 <- postResample(pred  = ann_prediction_1, obs  = prediction_results)[1]
+
+```
+After some tweaking we reached an RMSE of 68.31241642. This is not as good as the SVM.
+
+
+## Final model
+Now, we enter the last phase of our methodology: implementing the best model to predict on the values we left to the side at the start of the project. 
+
+### Model choice
+First, we will chose our model among the ones we tested. 
+```{r}
+model_names <- c("Naive prediction","Linear Model", "Linear Model with interaction terms", "Linear Model with top terms","Linear Model with initial variable and top interactions","Multinomial regression","Multinomial regression with interaction terms","Multinomial regression with top interaction terms","Support Vector Regression", "Optimized Support Vector Regression", "Random forest regression", "ANN regression")
+rmse_scores <- c(rmse_0,rmse_1,rmse_2,rmse_3,rmse_4, rmse_5, rmse_6, rmse_7, rmse_8, rmse_9, rmse_10, rmse_11)
+results_table <- data.frame(Model = model_names, RMSE = rmse_scores)
+knitr::kable(results_table, row.names = FALSE)
+```
+
+
+The best model we had was the Optimized Support Vector Regression at 66.49303 RMSE. 
+We will reproduce it on our full train dataset and use the final test data to get results. 
+
+### Final test data transformation
+We need to apply the same transformations to the data we will use for the final test than what we did to the more regular. 
+
+```{r}
+encoded_final_test_set <- final_test_set
+#Binaries
+encoded_final_test_set <- mutate(encoded_final_test_set, Gender = if_else(Gender=="Female", 1, 0))
+encoded_final_test_set <- mutate(encoded_final_test_set, Family_History_of_OCD  = if_else(Family_History_of_OCD=="No",0,1))
+encoded_final_test_set <- mutate(encoded_final_test_set, Depression_Diagnosis  = if_else(Depression_Diagnosis=="No",0,1))
+encoded_final_test_set <- mutate(encoded_final_test_set, Anxiety_Diagnosis  = if_else(Anxiety_Diagnosis=="No",0,1))
+#Nominals
+
+for(index in 1:length(Ethnicities)){
+    value <- Ethnicities[index]
+    name = paste("Ethnicity", value, sep = "_")
+    encoded_final_test_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_final_test_set$Ethnicity, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_final_test_set[name] <- detection
+}
+for(index in 1:length(Marital_Statuses)){
+    value <- Marital_Statuses[index]
+    name = paste("Marital_Status", value, sep = "_")
+    encoded_final_test_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_final_test_set$Marital_Status, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_final_test_set[name] <- detection
+}
+for(index in 1:length(Previous_Diagnoses)){
+    value <- Previous_Diagnoses[index]
+    name = paste("Previous_Diagnosis", value, sep = "_")
+    encoded_final_test_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_final_test_set$Previous_Diagnoses, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_final_test_set[name] <- detection
+}
+for(index in 1:length(Obsession_Types)){
+    value <- Obsession_Types[index]
+    name = paste("Obsession_Type", value, sep = "_")
+    encoded_final_test_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_final_test_set$Obsession_Type, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_final_test_set[name] <- detection
+}
+for(index in 1:length(Compulsion_Types)){
+    value <- Compulsion_Types[index]
+    name = paste("Compulsion_Type", value, sep = "_")
+    encoded_final_test_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_final_test_set$Compulsion_Type, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_final_test_set[name] <- detection
+}
+for(index in 1:length(Medications)){
+    value <- Medications[index]
+    name = paste("Medications", value, sep = "_")
+    encoded_final_test_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_final_test_set$Medications, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_final_test_set[name] <- detection
+}
+for(index in 1:length(Education_Level)){
+    value <- Education_Level[index]
+    name = paste("Education_Level", value, sep = "_")
+    encoded_final_test_set[name] <- NA
+    detection <-as.integer(
+    str_detect(
+      encoded_final_test_set$Education_Level, 
+      value
+      )
+    )
+    detection[is.na(detection)] <- 0
+    encoded_final_test_set[name] <- detection
+}
+
+names(encoded_final_test_set)[names(encoded_final_test_set) == "Previous_Diagnosis_Panic Disorder"] <- "Previous_Diagnosis_Panic_Disorder"
+names(encoded_final_test_set)[names(encoded_final_test_set) == "Obsession_Type_Harm-related"] <- "Obsession_Type_Harm_related"
+names(encoded_final_test_set)[names(encoded_final_test_set) == "Education_Level_High School"] <- "Education_Level_High_School"
+names(encoded_final_test_set)[names(encoded_final_test_set) == "Education_Level_Some College"] <- "Education_Level_Some_College"
+names(encoded_final_test_set)[names(encoded_final_test_set) == "Education_Level_College Degree"] <- "Education_Level_College_Degree"
+names(encoded_final_test_set)[names(encoded_final_test_set) == "Education_Level_Graduate Degree"] <- "Education_Level_Graduate_Degree"
+```
+```{r}
+encoded_final_test_set <- encoded_final_test_set[,c(-1, -4,-5,-6,-9,-11,-12,-17)]
+
+```
+```{r}
+#apply the scale 
+scales_final_test_set <- predict(scale, encoded_final_test_set)
+
+#Separate duration of symptoms from the rest of the set
+final_prediction_results <- scales_final_test_set[,4]
+scaled_final_test_set<- scales_final_test_set[,-4]
+
+```
+
+We now have our three sets of data :
+- The scaled_work_set which will be used for training.
+- The scaled_final_test_set which will be used to predict the results
+- The final_prediction_results which will be used to verify the performance of our model for the prediction
+
+### Final model
+
+```{r}
+svm_model <-svm(
+  Duration_of_Symptoms~.,
+  data = scaled_work_set,
+  gamma = 0.01,
+  cost = 1)
+```
+
+```{r}
+svm_prediction <- predict(
+  svm_model, 
+  newdata = scaled_final_test_set
+)
+```
+
+```{r}
+postResample(pred  = svm_prediction, obs  = final_prediction_results)
+rmse <- postResample(pred  = svm_prediction, obs  = final_prediction_results)[1]
+```
+
+Our RMSE dropped to 71.818874496 The tests had an RMSE of 66.49303.
+
+
+# Conclusion
+
+We were working with a dataset of OCD cases, trying to predict the duration in month of the symptoms. After preparing the data, we compared several models, and chose to use a support vector model. During the trials, this gave us an RMSE of 66.49303. When we applied that model to the full dataset, we obtained an RMSE of 71.818874496.
+
+Considering that our unit of length was the month, this means our errors are around 6 years, or about 30% of our full range of values. This is not a good prediction. As noted earlier, the Rsquared is also very low, 0.001060598 which means that the information we imputed explain 10% of the values.
+
+If we consider the graph from earlier, we can confirm our suspicions: the lack of correlations between our variables makes an accurate prediction very difficult. 
+
+```{r}
+corrplot(cor(subset_data)[1,, drop=FALSE], method = "color", cl.pos='n', tl.col="black", tl.srt=45,tl.cex = 0.4)
+
+```
+To conclude, we have a model, wich is better than giving our patient the average over all patients, since our RMSE beats the RMSE of our model beats the naive value by a few months. However it is still very far from being actually good. 
+
+If we were to expand this project in a broader context, such as a tool meant to be used in a real situation, these results would not be acceptable for deployment and we would need to pursue more steps to improve it. Considering that all variables had very small correlations with the duration of symptoms, our first goal would be to search for more variables that might explain a greater part of the phenomenon. In this hypothetical situation, we would have medical specialists as part of the teams, and we would need to consult them. 
