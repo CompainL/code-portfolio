@@ -1,6 +1,9 @@
 # Project Overview
 
-This personal code project focuses on creating a little software that will randomly call salsa steps. I happen to danse salsa, and one of the main practice exercices is to danse solo on a music, and to move randomly between different steps. This exercice develops muscle memory for the steps and their transitions, and the sense of rythm. Now this is an exercice that is more interesting with a teacher, because they are the ones telling you at the last moment what step to danse, which removes the "what steps am I practicing next? Have I practiced everything?" question from your mind and lets the dancer concentrate on dancin.
+This personal code project focuses on creating a little software that will randomly call salsa steps.
+
+I happen to danse salsa, and one of the main practice exercices is to danse solo on a music, and to move randomly between different steps. This exercice develops muscle memory for the steps and their transitions, and the sense of rythm. Now this is an exercice that is more interesting with a teacher, because they are the ones telling you at the last moment what step to danse, which removes the "what steps am I practicing next? Have I practiced everything?" question from your mind and lets the dancer concentrate on dancing.
+This role of the teacher may be fulfilled wth a software tool that randomly picks steps from a list.
 
 My primary goal here is to exercices my ability to define a problem by myself and to develop a software solution. 
 
